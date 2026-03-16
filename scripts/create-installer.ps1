@@ -7,6 +7,7 @@
 
 param(
     [switch]$Unpack,
+    [switch]$NoSign,
     [string]$Publish = "",
     [ValidateSet("cuda", "rocm")]
     [string]$GpuBackend = "cuda"
@@ -34,23 +35,38 @@ if (-not (Test-Path "python-embed")) {
 # Set artifact name suffix for GPU variant (read by electron-builder.yml template)
 $env:LTX_ARTIFACT_SUFFIX = if ($GpuBackend -eq "rocm") { "-ROCm" } else { "" }
 
+# Prepare signing override: write a temp JSON config that nulls out azureSignOptions
+# when -NoSign is set (local builds without Azure certificate credentials).
+$TempSignConfig = $null
+if ($NoSign) {
+    $env:CSC_IDENTITY_AUTO_DISCOVERY = "false"
+    $TempSignConfig = [System.IO.Path]::GetTempFileName() -replace '\.tmp$', '.json'
+    '{"win":{"azureSignOptions":null}}' | Set-Content -Path $TempSignConfig -Encoding UTF8
+    Write-Host "Code signing disabled for local build." -ForegroundColor DarkYellow
+}
+
 # Build with electron-builder
 if ($Unpack) {
     Write-Host "Packaging unpacked app (fast mode)..." -ForegroundColor Yellow
-    pnpm exec electron-builder --win --dir
+    $ConfigArgs = if ($TempSignConfig) { @("--config", $TempSignConfig) } else { @() }
+    pnpm exec electron-builder --win --dir @ConfigArgs
 } else {
     Write-Host "Packaging installer..." -ForegroundColor Yellow
     $PublishArgs = @()
     if ($Publish -ne "") {
         $PublishArgs = @("--publish", $Publish)
     }
-    pnpm exec electron-builder --win @PublishArgs
+    $ConfigArgs = if ($TempSignConfig) { @("--config", $TempSignConfig) } else { @() }
+    pnpm exec electron-builder --win @PublishArgs @ConfigArgs
 }
 
 if ($LASTEXITCODE -ne 0) {
+    if ($TempSignConfig) { Remove-Item -Force $TempSignConfig -ErrorAction SilentlyContinue }
     Write-Host "Failed to build!" -ForegroundColor Red
     exit 1
 }
+
+if ($TempSignConfig) { Remove-Item -Force $TempSignConfig -ErrorAction SilentlyContinue }
 
 # Summary
 Write-Host "`n========================================" -ForegroundColor Green
