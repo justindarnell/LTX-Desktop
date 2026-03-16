@@ -7,6 +7,7 @@ param(
     [switch]$SkipPython,
     [switch]$Clean,
     [switch]$Unpack,
+    [switch]$NoSign,
     [string]$Publish = "",
     [ValidateSet("cuda", "rocm")]
     [string]$GpuBackend = "cuda"
@@ -106,6 +107,7 @@ if ($LASTEXITCODE -ne 0) {
 # ============================================================
 $pkgParams = @{}
 if ($Unpack)         { $pkgParams["Unpack"] = $true }
+if ($NoSign)         { $pkgParams["NoSign"] = $true }
 if ($Publish -ne "") { $pkgParams["Publish"] = $Publish }
 $pkgParams["GpuBackend"] = $GpuBackend
 
